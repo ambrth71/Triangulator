@@ -1,8 +1,8 @@
 using System;
+using System.Windows;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
-using Microsoft.Xna.Framework;
 
 namespace Triangulator
 {
@@ -22,6 +22,8 @@ namespace Triangulator
 	/// </summary>
 	public static class Triangulator
 	{
+		public static readonly Vector UNITX = new Vector(1, 0);
+		private static readonly double EPSILON = 1e-8;
 		#region Fields
 
 		static readonly IndexableCyclicalLinkedList<Vertex> polygonVertices = new IndexableCyclicalLinkedList<Vertex>();
@@ -43,21 +45,21 @@ namespace Triangulator
 		/// <param name="outputVertices">The resulting vertices that include any reversals of winding order and holes.</param>
 		/// <param name="indices">The resulting indices for rendering the shape as a triangle list.</param>
 		public static void Triangulate(
-			Vector2[] inputVertices,
+			Point[] inputVertices,
 			WindingOrder desiredWindingOrder,
-			out Vector2[] outputVertices,
+			out Point[] outputVertices,
 			out int[] indices)
 		{
 			Log("\nBeginning triangulation...");
 
 			List<Triangle> triangles = new List<Triangle>();
-
+			
 			//make sure we have our vertices wound properly
 			if (DetermineWindingOrder(inputVertices) == WindingOrder.Clockwise)
 				outputVertices = ReverseWindingOrder(inputVertices);
 			else
-				outputVertices = (Vector2[])inputVertices.Clone();
-
+				outputVertices = (Point[])inputVertices.Clone();
+			
 			//clear all of the lists
 			polygonVertices.Clear();
 			earVertices.Clear();
@@ -118,7 +120,7 @@ namespace Triangulator
 		/// <param name="shapeVerts">An array of vertices for the primary shape.</param>
 		/// <param name="holeVerts">An array of vertices for the hole to be cut. It is assumed that these vertices lie completely within the shape verts.</param>
 		/// <returns>The new array of vertices that can be passed to Triangulate to properly triangulate the shape with the hole.</returns>
-		public static Vector2[] CutHoleInShape(Vector2[] shapeVerts, Vector2[] holeVerts)
+		public static Point[] CutHoleInShape(Point[] shapeVerts, Point[] holeVerts)
 		{
 			Log("\nCutting hole into shape...");
 
@@ -140,7 +142,7 @@ namespace Triangulator
 			for (int i = 0; i < holeVerts.Length; i++)
 				holePolygon.Add(new Vertex(holeVerts[i], i + polygonVertices.Count));
 
-#if DEBUG
+#if LOG
 			StringBuilder vString = new StringBuilder();
 			foreach (Vertex v in polygonVertices)
 				vString.Append(string.Format("{0}, ", v));
@@ -158,7 +160,9 @@ namespace Triangulator
 			//find the hole vertex with the largest X value
 			Vertex rightMostHoleVertex = holePolygon[0];
 			foreach (Vertex v in holePolygon)
-				if (v.Position.X > rightMostHoleVertex.Position.X)
+				if (v.Position.X > rightMostHoleVertex.Position.X
+					|| (v.Position.X == rightMostHoleVertex.Position.X
+					&& v.Position.Y > rightMostHoleVertex.Position.Y) )
 					rightMostHoleVertex = v;
 
 			//construct a list of all line segments where at least one vertex
@@ -178,14 +182,16 @@ namespace Triangulator
 
 			//now we try to find the closest intersection point heading to the right from
 			//our hole vertex.
-			float? closestPoint = null;
+			double? closestPoint = null;
 			LineSegment closestSegment = new LineSegment();
 			foreach (LineSegment segment in segmentsToTest)
 			{
-				float? intersection = segment.IntersectsWithRay(rightMostHoleVertex.Position, Vector2.UnitX);
-				if (intersection != null)
+				if ( segment.IntersectsWithRay(rightMostHoleVertex.Position, UNITX, out double intersection) )
 				{
-					if (closestPoint == null || closestPoint.Value > intersection.Value)
+					//same intersection overwrites the previous one
+					//it happens when the ray intersects a previous hole junction to polygon
+					//the 'closer' segment is supposed to be further in the list
+					if (closestPoint == null || closestPoint.Value-intersection > -EPSILON)
 					{
 						closestPoint = intersection;
 						closestSegment = segment;
@@ -199,37 +205,64 @@ namespace Triangulator
 				return shapeVerts;
 
 			//otherwise we can find our mutually visible vertex to split the polygon
-			Vector2 I = rightMostHoleVertex.Position + Vector2.UnitX * closestPoint.Value;
-			Vertex P = (closestSegment.A.Position.X > closestSegment.B.Position.X) 
-				? closestSegment.A 
-				: closestSegment.B;
+			Point I = rightMostHoleVertex.Position + UNITX * closestPoint.Value;
 
-			//construct triangle MIP
-			Triangle mip = new Triangle(rightMostHoleVertex, new Vertex(I, 1), P);
-
-			//see if any of the reflex vertices lie inside of the MIP triangle
-			List<Vertex> interiorReflexVertices = new List<Vertex>();
-			foreach (Vertex v in reflexVertices)
-				if (mip.ContainsPoint(v))
-					interiorReflexVertices.Add(v);
-
-			//if there are any interior reflex vertices, find the one that, when connected
-			//to our rightMostHoleVertex, forms the line closest to Vector2.UnitX
-			if (interiorReflexVertices.Count > 0)
+			//search the intersection in the segment points
+			Vertex P = new Vertex();
+			bool onPolygon = false;
+			foreach (LineSegment segment in segmentsToTest)
 			{
-				float closestDot = -1f;
-				foreach (Vertex v in interiorReflexVertices)
+				if ((segment.A.Position - I).Length < EPSILON)
 				{
-					//compute the dot product of the vector against the UnitX
-					Vector2 d = Vector2.Normalize(v.Position - rightMostHoleVertex.Position);
-					float dot = Vector2.Dot(Vector2.UnitX, d);
+					onPolygon = true;
+					P = segment.A;
+					break;
+				}
+				else if ((segment.B.Position - I).Length < EPSILON)
+				{
+					onPolygon = true;
+					P = segment.B;
+					break;
+				}
+			}
+			//if I is a vertex of the outer polygon, then rightmost hole vertex and I are mutually visible and the algorithm terminates
+			if (!onPolygon)
+			{
+				if ((closestSegment.A.Position.X > closestSegment.B.Position.X) ||
+					(closestSegment.A.Position.X == closestSegment.B.Position.X
+					&& closestSegment.A.Position.Y > closestSegment.B.Position.Y))
+					P = closestSegment.A;
+				else
+					P = closestSegment.B;
 
-					//if this line is the closest we've found
-					if (dot > closestDot)
+				//construct triangle MIP
+				Triangle mip = new Triangle(rightMostHoleVertex, new Vertex(I, 1), P);
+
+				//see if any of the reflex vertices lie inside of the MIP triangle
+				List<Vertex> interiorReflexVertices = new List<Vertex>();
+				foreach (Vertex v in reflexVertices)
+					if (mip.ContainsPoint(v) && v.Position!=P.Position)
+						interiorReflexVertices.Add(v);
+
+				//if there are any interior reflex vertices, find the one that, when connected
+				//to our rightMostHoleVertex, forms the line closest to Point.UnitX
+				if (interiorReflexVertices.Count > 0)
+				{
+					double closestDot = -1f;
+					foreach (Vertex v in interiorReflexVertices)
 					{
-						//save the value and save the vertex as P
-						closestDot = dot;
-						P = v;
+						//compute the dot product of the Point against the UnitX
+						Vector d = v.Position - rightMostHoleVertex.Position;
+						d.Normalize();
+						double dot = Vector.Multiply(UNITX, d);
+
+						//if this line is the closest we've found
+						if (dot > closestDot)
+						{
+							//save the value and save the vertex as P
+							closestDot = dot;
+							P = v;
+						}
 					}
 				}
 			}
@@ -250,7 +283,7 @@ namespace Triangulator
 			}
 			polygonVertices.AddAfter(polygonVertices[injectPoint], P);
 
-#if DEBUG
+#if LOG
 			vString = new StringBuilder();
 			foreach (Vertex v in polygonVertices)
 				vString.Append(string.Format("{0}, ", v));
@@ -258,7 +291,7 @@ namespace Triangulator
 #endif
 
 			//finally we write out the new polygon vertices and return them out
-			Vector2[] newShapeVerts = new Vector2[polygonVertices.Count];
+			Point[] newShapeVerts = new Point[polygonVertices.Count];
 			for (int i = 0; i < polygonVertices.Count; i++)
 				newShapeVerts[i] = polygonVertices[i].Value.Position;
 
@@ -275,7 +308,7 @@ namespace Triangulator
 		/// <param name="vertices">The vertices of the polygon.</param>
 		/// <param name="windingOrder">The desired winding order.</param>
 		/// <returns>A new set of vertices if the winding order didn't match; otherwise the original set.</returns>
-		public static Vector2[] EnsureWindingOrder(Vector2[] vertices, WindingOrder windingOrder)
+		public static Point[] EnsureWindingOrder(Point[] vertices, WindingOrder windingOrder)
 		{
 			Log("\nEnsuring winding order of {0}...", windingOrder);
 			if (DetermineWindingOrder(vertices) != windingOrder)
@@ -297,14 +330,14 @@ namespace Triangulator
 		/// </summary>
 		/// <param name="vertices">The vertices of the polygon.</param>
 		/// <returns>The new vertices for the polygon with the opposite winding order.</returns>
-		public static Vector2[] ReverseWindingOrder(Vector2[] vertices)
+		public static Point[] ReverseWindingOrder(Point[] vertices)
 		{
 			Log("\nReversing winding order...");
-			Vector2[] newVerts = new Vector2[vertices.Length];
+			Point[] newVerts = new Point[vertices.Length];
 
-#if DEBUG
+#if LOG
 			StringBuilder vString = new StringBuilder();
-			foreach (Vector2 v in vertices)
+			foreach (Point v in vertices)
 				vString.Append(string.Format("{0}, ", v));
 			Log("Original Vertices: {0}", vString);
 #endif
@@ -313,9 +346,9 @@ namespace Triangulator
 			for (int i = 1; i < newVerts.Length; i++)
 				newVerts[i] = vertices[vertices.Length - i];
 
-#if DEBUG
+#if LOG
 			vString = new StringBuilder();
-			foreach (Vector2 v in newVerts)
+			foreach (Point v in newVerts)
 				vString.Append(string.Format("{0}, ", v));
 			Log("New Vertices After Reversal: {0}\n", vString);
 #endif
@@ -332,29 +365,25 @@ namespace Triangulator
 		/// </summary>
 		/// <param name="vertices">The vertices of the polygon.</param>
 		/// <returns>The calculated winding order of the polygon.</returns>
-		public static WindingOrder DetermineWindingOrder(Vector2[] vertices)
+		public static WindingOrder DetermineWindingOrder(Point[] vertices)
 		{
-			int clockWiseCount = 0;
-			int counterClockWiseCount = 0;
-			Vector2 p1 = vertices[0];
+			double winding = 0;
+			Point previousPoint = vertices[0];
 
 			for (int i = 1; i < vertices.Length; i++)
 			{
-				Vector2 p2 = vertices[i];
-				Vector2 p3 = vertices[(i + 1) % vertices.Length];
+				Point point = vertices[i];
+				Point nextPoint = vertices[(i + 1) % vertices.Length];
 
-				Vector2 e1 = p1 - p2;
-				Vector2 e2 = p3 - p2;
+				Vector previousVector = point - previousPoint;
+				Vector nextVector = nextPoint - point;
 
-				if (e1.X * e2.Y - e1.Y * e2.X >= 0)
-					clockWiseCount++;
-				else
-					counterClockWiseCount++;
+				winding += Vector.AngleBetween(previousVector, nextVector);
 
-				p1 = p2;
+				previousPoint = point;
 			}
 
-			return (clockWiseCount > counterClockWiseCount)
+			return (winding < 0)
 				? WindingOrder.Clockwise
 				: WindingOrder.CounterClockwise;
 		}
@@ -385,7 +414,7 @@ namespace Triangulator
 			ValidateAdjacentVertex(next);
 
 			//write out the states of each of the lists
-#if DEBUG
+#if LOG
 			StringBuilder rString = new StringBuilder();
 			foreach (Vertex v in reflexVertices)
 				rString.Append(string.Format("{0}, ", v.Index));
@@ -523,11 +552,13 @@ namespace Triangulator
 			Vertex p = polygonVertices[polygonVertices.IndexOf(c) - 1].Value;
 			Vertex n = polygonVertices[polygonVertices.IndexOf(c) + 1].Value; 
 			
-			Vector2 d1 = Vector2.Normalize(c.Position - p.Position);
-			Vector2 d2 = Vector2.Normalize(n.Position - c.Position);
-			Vector2 n2 = new Vector2(-d2.Y, d2.X);
+			Vector d1 = c.Position - p.Position;
+			d1.Normalize();
+			Vector d2 = n.Position - c.Position;
+			d2.Normalize();
+			Vector n2 = new Vector(-d2.Y, d2.X);
 
-			return (Vector2.Dot(d1, n2) <= 0f);
+			return (Vector.Multiply(d1, n2) <= 0);
 		}
 
 		#endregion
@@ -546,12 +577,14 @@ namespace Triangulator
 		[Conditional("DEBUG")]
 		private static void Log(string format, params object[] parameters)
 		{
+#if LOG
 			System.Console.WriteLine(format, parameters);
+#endif
 		}
 
-		#endregion
+#endregion
 
-		#endregion
+#endregion
 	}
 
 	/// <summary>

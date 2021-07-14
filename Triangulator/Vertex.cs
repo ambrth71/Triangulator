@@ -1,13 +1,13 @@
-using Microsoft.Xna.Framework;
+using System.Windows;
 
 namespace Triangulator
 {
 	struct Vertex
 	{
-		public readonly Vector2 Position;
+		public readonly Point Position;
 		public readonly int Index;
 
-		public Vertex(Vector2 position, int index)
+		public Vertex(Point position, int index)
 		{
 			Position = position;
 			Index = index;
@@ -15,7 +15,7 @@ namespace Triangulator
 
 		public override bool Equals(object obj)
 		{
-			if (obj.GetType() != typeof(Vertex)) 
+			if (!(obj is Vertex))
 				return false;
 			return Equals((Vertex)obj);
 		}

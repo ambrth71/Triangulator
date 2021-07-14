@@ -1,0 +1,28 @@
+﻿<Window x:Class="TriangulatorTest.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TriangulatorTest"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="804" Width="1014">
+    <DockPanel>
+        <ToolBarTray DockPanel.Dock ="Top">
+            <ToolBar Band="1" BandIndex="1">
+                <Button x:Name="previous" Content="&lt;" Width="24" Click="PreviousClick" FontWeight="Bold"/>
+                <Button x:Name="next" Content="&gt;" Width="24" Click="NextClick" FontWeight="Bold"/>
+            </ToolBar>
+        </ToolBarTray>
+    <Canvas  Name="paintSurface">
+        <Canvas.Background>
+            <SolidColorBrush Color="White" Opacity="0"/>
+        </Canvas.Background>
+        <Canvas.RenderTransform>
+            <TransformGroup>
+                <ScaleTransform ScaleX="1" ScaleY="-1"/>
+                <TranslateTransform X="500" Y="300"/>
+            </TransformGroup>
+        </Canvas.RenderTransform>
+    </Canvas>
+    </DockPanel>
+</Window>

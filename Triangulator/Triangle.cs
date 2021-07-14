@@ -1,5 +1,3 @@
-using Microsoft.Xna.Framework;
-
 namespace Triangulator
 {
 	/// <summary>
@@ -46,7 +44,7 @@ namespace Triangulator
 			if ((sA.Position.Y < point.Position.Y && sB.Position.Y >= point.Position.Y) ||
 				(sB.Position.Y < point.Position.Y && sA.Position.Y >= point.Position.Y))
 			{
-				float x = 
+				double x = 
 					sA.Position.X + 
 					(point.Position.Y - sA.Position.Y) / 
 					(sB.Position.Y - sA.Position.Y) * 
@@ -61,7 +59,7 @@ namespace Triangulator
 
 		public override bool Equals(object obj)
 		{
-			if (obj.GetType() != typeof (Triangle)) 
+			if (!(obj is Triangle))
 				return false;
 			return Equals((Triangle) obj);
 		}
