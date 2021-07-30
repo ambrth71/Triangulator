@@ -270,6 +270,42 @@ namespace TriangulatorTest
 			return sourceVertices;
 		}
 
+		private Point[] DoubleInjectionPointOnRay()
+        {
+			Point[] sourceVertices = new Point[]
+			{
+			   new Point(0, 0),
+			   new Point(210, 0),
+			   new Point(210, 150),
+			   new Point(0, 150)
+			};
+			Point[] holeVertices = new Point[]
+			{
+			   new Point(125, 50),
+			   new Point(150, 50),
+			   new Point(150, 100),
+			   new Point(125, 100)
+			};
+			sourceVertices = Triangulator.Triangulator.CutHoleInShape(sourceVertices, holeVertices);
+			holeVertices = new Point[]
+			{
+			   new Point(75, 50),
+			   new Point(100, 50),
+			   new Point(100, 75),
+			   new Point(75, 75)
+			};
+			sourceVertices = Triangulator.Triangulator.CutHoleInShape(sourceVertices, holeVertices);
+			holeVertices = new Point[]
+			{
+			   new Point(25, 50),
+			   new Point(50, 50),
+			   new Point(50, 100),
+			   new Point(25, 100)
+			};
+			sourceVertices = Triangulator.Triangulator.CutHoleInShape(sourceVertices, holeVertices);
+			return sourceVertices;
+		}
+
 		private void CreateGeometry()
 		{
 			Point[] sourceVertices = null;
@@ -285,12 +321,15 @@ namespace TriangulatorTest
 					sourceVertices = PolygonPointOnRay();
 					break;
 				case 3:
-					sourceVertices = InvisibleInjectionVertex();
+					sourceVertices = DoubleInjectionPointOnRay();
 					break;
 				case 4:
-					sourceVertices = Star();
+					sourceVertices = InvisibleInjectionVertex();
 					break;
 				case 5:
+					sourceVertices = Star();
+					break;
+				case 6:
 					sourceVertices = ManyHoles();
 					break;
 			}
@@ -330,7 +369,7 @@ namespace TriangulatorTest
 
         private void NextClick(object sender, RoutedEventArgs e)
         {
-			if (Example < 5)
+			if (Example < 6)
 				Example++;
 			CreateGeometry();
 		}

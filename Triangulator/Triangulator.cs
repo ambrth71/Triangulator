@@ -190,7 +190,7 @@ namespace Triangulator
 				{
 					//same intersection overwrites the previous one
 					//it happens when the ray intersects a previous hole junction to polygon
-					//the 'closer' segment is supposed to be further in the list
+					//the 'closer' segment of a junction is supposed to be further in the list because of the winding
 					if (closestPoint == null || closestPoint.Value-intersection > -EPSILON)
 					{
 						closestPoint = intersection;
@@ -208,21 +208,22 @@ namespace Triangulator
 			Point I = rightMostHoleVertex.Position + UNITX * closestPoint.Value;
 
 			//search the intersection in the segment points
-			Vertex P = new Vertex();
+			//the intersection is a segment point if it's 'close' to it
+			//2 points could be at the same position when it's a previous injection point
+			//because of the winding, it should be the point with the larger index (when returning on the original shape)
+			Vertex P = new Vertex(new Point(),-1);
 			bool onPolygon = false;
 			foreach (LineSegment segment in segmentsToTest)
 			{
-				if ((segment.A.Position - I).Length < EPSILON)
+				if ((segment.A.Position - I).Length < EPSILON && (P.Index<0 || segment.A.Index>P.Index))
 				{
 					onPolygon = true;
 					P = segment.A;
-					break;
 				}
-				else if ((segment.B.Position - I).Length < EPSILON)
+				else if ((segment.B.Position - I).Length < EPSILON && (P.Index < 0 || segment.B.Index > P.Index))
 				{
 					onPolygon = true;
 					P = segment.B;
-					break;
 				}
 			}
 			//if I is a vertex of the outer polygon, then rightmost hole vertex and I are mutually visible and the algorithm terminates
